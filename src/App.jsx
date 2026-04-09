@@ -7,71 +7,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
-const CAPTION_PROMPT = `당신은 인스타그램 매거진 계정의 에디터입니다.
-광고주가 보내온 소스(가이드, 브리프, 보도자료 등)를 받으면 아래 조건에 맞게 캡션을 작성합니다.
-
-[캡션 형식]
-- 첫 줄: 한 문장 훅 + 이모지 1개 (강렬하고 간결하게)
-- 본문: 본문 초반에는 가장 사람들이 본능적으로 관심을 가질만한 내용을 배치. 3~4개 단락, 각 단락 3~4줄 이내
-- 각 단락 마지막에 맥락에 맞는 이모지 1개
-- 후반 단락: 현재 상황 또는 수치로 마무리
-- 마지막 단락: 이 내용에 대한 객관적인 사람들이 필요할 정보를 리스트업이나 보기좋게 정리
-
-[문체]
-- 서머셋 몸의 글쓰기원칙을 지킴
-- 구어체와 뉴스체 혼합 (~입니다/~인데요/~죠 등 자연스러운 뉴스체 + 존대어)
-- 구체적인 숫자/날짜/데이터 포함
-- 대립/갈등/반전/충격 구도가 있으면 강조
-- 모르는 사람들도 이해할 수 있는 맥락 사용 (글 전반적으로)
-
-[내용 구성 순서]
-1. 핵심 사실 (무슨 일이 일어났는가)
-2. 원인/배경 설명
-3. 전개 과정
-4. 현재 상황 + 수치`;
-
-const TITLE_PROMPT = `당신은 인기 제목의 '구조'를 참고하여, 사용자가 전달한 콘텐츠 재료를 분석 후 인스타 콘텐츠 썸네일 제목을 짓는 봇입니다. (팩트에 기반해야 함)
-
-미스터비스트의 SNS 썸네일 이론을 참고하여 새로운 카피라이팅 이론을 도출하고, 20개의 제목 안을 제안합니다.
-
-[미스터비스트 썸네일 이론 핵심]
-- 3초 안에 이해 가능해야 함
-- 호기심 갭(Curiosity Gap): 알고 싶은데 모르는 상태를 만들 것
-- 감정 트리거: 놀람, 분노, 감동, 공감 중 하나는 건드릴 것
-- 구체적 숫자가 추상적 표현보다 강력
-- 짧을수록 좋음. 불필요한 단어 제거
-
-[참고 인기 제목 패턴]
-- 권위 인용형: "의사들이 뽑은~", "뉴욕타임스가 선정한~"
-- 반전/충격형: "26년만에 밝혀진~", "누나가 죽었다."
-- 공감/실용형: "대부분 직장인들이 이해하는~", "그동안 몰랐던~"
-- 서사/스토리형: "사랑하는 아내가 떠나가기까지의 기록"
-- 숫자 강조형: "하루 15분만~", "수백만원 쓰면~"
-- 호기심 유발형: "~하는 이유", "~의 정체"`;
-
-const SYSTEM_PROMPT = `${CAPTION_PROMPT}
-
-또한 썸네일 제목도 함께 제안합니다.
-${TITLE_PROMPT}
-
-반드시 아래 JSON으로만 응답. 다른 텍스트 없이:
-{
-  "brand": "브랜드/행사명",
-  "caption": "피드 캡션 전문 (위 형식대로 작성)",
-  "titles": [
-    "썸네일 제목 안 1",
-    "썸네일 제목 안 2",
-    ... (20개)
-  ],
-  "info": {
-    "date": "일시 (없으면 null)",
-    "location": "장소 (없으면 null)",
-    "link": "링크 (없으면 null)",
-    "hashtags": ["해시태그1", "해시태그2"],
-    "mentions": ["@계정1"]
-  }
-}`;
-
 const GOOGLE_CLIENT_ID = window.__GOOGLE_CLIENT_ID__ || "";
 const ALLOWED_DOMAIN = "curationclub.kr";
 
@@ -88,10 +23,13 @@ function LoginScreen({ onLogin }) {
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: (response) => {
-          const payload = JSON.parse(atob(response.credential.split(".")[1]));
+          // Store the raw credential (ID token) for server-side verification
+          const idToken = response.credential;
+          const payload = JSON.parse(atob(idToken.split(".")[1]));
           if (payload.hd === ALLOWED_DOMAIN || payload.email?.endsWith("@" + ALLOWED_DOMAIN)) {
-            localStorage.setItem("cc_user", JSON.stringify({ name: payload.name, email: payload.email, picture: payload.picture }));
-            onLogin({ name: payload.name, email: payload.email, picture: payload.picture });
+            const userData = { name: payload.name, email: payload.email, picture: payload.picture, idToken };
+            localStorage.setItem("cc_user", JSON.stringify(userData));
+            onLogin(userData);
           } else {
             alert("@curationclub.kr 계정만 사용할 수 있습니다.");
           }
@@ -225,16 +163,24 @@ function MainApp({ user, onLogout }) {
 
       const response = await fetch("/api/anthropic/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${user.idToken}`,
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4000,
-          system: SYSTEM_PROMPT,
           messages: [{ role: "user", content: `아래는 광고주가 보내온 가이드 원문이야. 이걸 기반으로 캡션과 썸네일 제목을 만들어줘.\n\n---\n${fullText}\n---` }],
         }),
       });
 
       const data = await response.json();
+
+      if (response.status === 401 || response.status === 403) {
+        setError(data.error?.message || "인증 오류. 다시 로그인해주세요.");
+        localStorage.removeItem("cc_user");
+        setLoading(false);
+        return;
+      }
+
       if (data.type === "error") {
         setError(`API 오류: ${data.error?.message || JSON.stringify(data.error)}`);
         setLoading(false);
@@ -292,7 +238,7 @@ function MainApp({ user, onLogout }) {
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <img src={user.picture} alt="" style={{ width:24, height:24, borderRadius:12 }} />
+          {user.picture && <img src={user.picture} alt="" style={{ width:24, height:24, borderRadius:12 }} />}
           <span style={{ fontSize:11, color:"#6a6a64" }}>{user.name}</span>
           <button onClick={onLogout} style={{ ...btnGhost, fontSize:10 }}>로그아웃</button>
         </div>
@@ -314,7 +260,7 @@ function MainApp({ user, onLogout }) {
             {guideFile ? (
               <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
                 <span style={{ fontSize:13, color:"#c8ff00", fontWeight:600 }}>{guideFile.name}</span>
-                <button onClick={(e)=>{e.stopPropagation(); setGuideFile(null);}} style={{ background:"none", border:"none", color:"#5a5a54", cursor:"pointer", fontSize:16 }}>×</button>
+                <button onClick={(e)=>{e.stopPropagation(); setGuideFile(null);}} style={{ background:"none", border:"none", color:"#5a5a54", cursor:"pointer", fontSize:16 }}>x</button>
               </div>
             ) : (
               <>

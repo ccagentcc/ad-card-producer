@@ -318,7 +318,23 @@ function MainApp({ user, onLogout }) {
               {result.info.location && <span style={tag}>📍 {result.info.location}</span>}
               {result.info.link && <span style={tag}>🔗 {result.info.link}</span>}
               {result.info.mentions?.map((m,i)=> <span key={i} style={tag}>{m}</span>)}
-              {result.info.hashtags?.map((h,i)=> <span key={i} style={{...tag, color:"#c8ff00", borderColor:"#c8ff0030"}}>#{h}</span>)}
+            </div>
+          )}
+
+          {/* Hashtags */}
+          {result.hashtags && result.hashtags.length > 0 && (
+            <div style={{ background:"#161614", border:"1px solid #222220", borderRadius:14, padding:"18px 20px", marginBottom:14 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                <span style={{ fontSize:10, fontWeight:700, color:"#4a4a44", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>HASHTAGS · {result.hashtags.length}</span>
+                <button onClick={() => copyText(result.hashtags.map(h => "#" + h).join(" "), "hashtags")} style={btnGhost}>{copied==="hashtags" ? "✓" : "전체 복사"}</button>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {result.hashtags.map((h, i) => (
+                  <span key={i} onClick={() => copyText("#" + h, "tag-" + i)} style={{ ...tag, color:"#c8ff00", borderColor:"#c8ff0030", cursor:"pointer" }}>
+                    #{h} {copied===("tag-"+i) ? "✓" : ""}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 

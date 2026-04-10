@@ -115,7 +115,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(express.static(resolve(__dirname, "dist")));
+app.use(express.static(resolve(__dirname, "dist"), { index: false }));
 app.use(express.json({ limit: "1mb" }));
 
 // ─── Auth middleware: verify Google ID token server-side ───

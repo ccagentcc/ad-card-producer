@@ -182,7 +182,7 @@ app.post("/api/anthropic/v1/messages", apiLimiter, requireAuth, async (req, res)
 });
 
 // ─── SPA fallback ───────────────────────────────
-app.get("*", (req, res) => {
+app.get("/{*path}", (req, res) => {
   let html = readFileSync(resolve(__dirname, "dist", "index.html"), "utf-8");
   html = html.replace(
     "</head>",

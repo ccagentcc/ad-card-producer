@@ -2,7 +2,7 @@ import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
-import { OAuth2Client } from "google-auth-library";
+import crypto from "crypto";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -25,12 +25,13 @@ try {
 } catch {}
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
-const ALLOWED_DOMAIN = "curationclub.kr";
+const TEAM_PASSWORD = process.env.TEAM_PASSWORD || "curationclub2026";
+const AUTH_SECRET = process.env.AUTH_SECRET || crypto.randomBytes(32).toString("hex");
 const ALLOWED_MODEL = "claude-sonnet-4-20250514";
 const MAX_TOKENS_LIMIT = 4000;
 
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+// Simple token store (in production, use JWT or similar)
+const validTokens = new Set();
 
 // ─── System prompt (server-side only, not exposed to client) ───
 const CAPTION_PROMPT = `당신은 인스타그램 매거진 계정의 에디터입니다.
@@ -94,12 +95,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com", "https://apis.google.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://*.googleusercontent.com"],
-      connectSrc: ["'self'", "https://accounts.google.com"],
-      frameSrc: ["https://accounts.google.com"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
     },
   },
 }));
@@ -115,34 +115,34 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(express.static(resolve(__dirname, "dist"), { index: false }));
+app.use(express.static(resolve(__dirname, "dist")));
 app.use(express.json({ limit: "1mb" }));
 
-// ─── Auth middleware: verify Google ID token server-side ───
-async function requireAuth(req, res, next) {
+// ─── Login endpoint ───
+app.post("/api/auth/login", (req, res) => {
+  const { password } = req.body;
+  if (password === TEAM_PASSWORD) {
+    const token = crypto.randomBytes(32).toString("hex");
+    validTokens.add(token);
+    // Auto-expire tokens after 7 days
+    setTimeout(() => validTokens.delete(token), 7 * 24 * 60 * 60 * 1000);
+    res.json({ success: true, token });
+  } else {
+    res.status(401).json({ success: false });
+  }
+});
+
+// ─── Auth middleware ───
+function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ type: "error", error: { message: "인증이 필요합니다." } });
   }
-
-  const idToken = authHeader.slice(7);
-  try {
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-
-    // Verify email domain
-    if (payload.hd !== ALLOWED_DOMAIN && !payload.email?.endsWith("@" + ALLOWED_DOMAIN)) {
-      return res.status(403).json({ type: "error", error: { message: "@curationclub.kr 계정만 사용할 수 있습니다." } });
-    }
-
-    req.user = { email: payload.email, name: payload.name };
-    next();
-  } catch (err) {
-    return res.status(401).json({ type: "error", error: { message: "유효하지 않은 인증 토큰입니다." } });
+  const token = authHeader.slice(7);
+  if (!validTokens.has(token)) {
+    return res.status(401).json({ type: "error", error: { message: "세션이 만료되었습니다. 다시 로그인해주세요." } });
   }
+  next();
 }
 
 // ─── API Proxy (authenticated + hardcoded model/system) ───
@@ -183,12 +183,7 @@ app.post("/api/anthropic/v1/messages", apiLimiter, requireAuth, async (req, res)
 
 // ─── SPA fallback ───────────────────────────────
 app.get("/{*path}", (req, res) => {
-  let html = readFileSync(resolve(__dirname, "dist", "index.html"), "utf-8");
-  html = html.replace(
-    "</head>",
-    `<script>window.__GOOGLE_CLIENT_ID__=${JSON.stringify(GOOGLE_CLIENT_ID)};</script></head>`
-  );
-  res.send(html);
+  res.sendFile(resolve(__dirname, "dist", "index.html"));
 });
 
 app.listen(PORT, () => {

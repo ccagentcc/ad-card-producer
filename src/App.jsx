@@ -7,44 +7,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
-const GOOGLE_CLIENT_ID = window.__GOOGLE_CLIENT_ID__ || "";
-const ALLOWED_DOMAIN = "curationclub.kr";
-
 // ─── Auth component ───
 function LoginScreen({ onLogin }) {
-  const btnRef = useRef(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!GOOGLE_CLIENT_ID) return;
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.onload = () => {
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response) => {
-          // Store the raw credential (ID token) for server-side verification
-          const idToken = response.credential;
-          const payload = JSON.parse(atob(idToken.split(".")[1]));
-          if (payload.hd === ALLOWED_DOMAIN || payload.email?.endsWith("@" + ALLOWED_DOMAIN)) {
-            const userData = { name: payload.name, email: payload.email, picture: payload.picture, idToken };
-            localStorage.setItem("cc_user", JSON.stringify(userData));
-            onLogin(userData);
-          } else {
-            alert("@curationclub.kr 계정만 사용할 수 있습니다.");
-          }
-        },
+  const handleLogin = async () => {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
       });
-      window.google.accounts.id.renderButton(btnRef.current, {
-        theme: "filled_black",
-        size: "large",
-        text: "signin_with",
-        shape: "pill",
-        width: 300,
-      });
-    };
-    document.head.appendChild(script);
-  }, [onLogin]);
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem("cc_user", JSON.stringify({ name: "팀원", token: data.token }));
+        onLogin({ name: "팀원", token: data.token });
+      } else {
+        setError("비밀번호가 틀렸습니다.");
+      }
+    } catch {
+      setError("서버 연결 실패");
+    }
+  };
 
   return (
     <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Pretendard',sans-serif" }}>
@@ -57,12 +42,22 @@ function LoginScreen({ onLogin }) {
       <div style={{ width:32, height:32, borderRadius:8, background:"#c8ff00", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:900, color:"#0c0c0b", fontFamily:"'DM Mono',monospace", marginBottom:16 }}>C</div>
       <div style={{ fontSize:20, fontWeight:800, color:"#f0f0ec", marginBottom:6, letterSpacing:"-0.3px" }}>AD PRODUCER</div>
       <div style={{ fontSize:12, color:"#3a3a36", fontFamily:"'DM Mono',monospace", marginBottom:40 }}>curationclub.kr 팀 전용</div>
-      <div ref={btnRef} />
-      {!GOOGLE_CLIENT_ID && (
-        <div style={{ marginTop:20, padding:"12px 20px", background:"#2e1a1a", border:"1px solid #5a2d2d", borderRadius:10, color:"#d4a0a0", fontSize:12, maxWidth:340, textAlign:"center" }}>
-          Google Client ID가 설정되지 않았습니다.
-        </div>
-      )}
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+        placeholder="비밀번호 입력"
+        style={{ width:280, padding:"14px 18px", borderRadius:12, border:"1.5px solid #2a2a26", background:"#111110", color:"#f0f0ec", fontSize:14, fontFamily:"'Pretendard',sans-serif", outline:"none", textAlign:"center", marginBottom:12 }}
+      />
+      {error && <div style={{ color:"#d4a0a0", fontSize:12, marginBottom:12 }}>{error}</div>}
+      <button
+        onClick={handleLogin}
+        disabled={!password}
+        style={{ width:280, padding:"14px", borderRadius:12, border:"none", background: password ? "#c8ff00" : "#1a1a18", color: password ? "#0c0c0b" : "#3a3a36", fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Pretendard',sans-serif" }}
+      >
+        로그인
+      </button>
     </div>
   );
 }
@@ -165,7 +160,7 @@ function MainApp({ user, onLogout }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${user.idToken}`,
+          "Authorization": `Bearer ${user.token}`,
         },
         body: JSON.stringify({
           messages: [{ role: "user", content: `아래는 광고주가 보내온 가이드 원문이야. 이걸 기반으로 캡션과 썸네일 제목을 만들어줘.\n\n---\n${fullText}\n---` }],

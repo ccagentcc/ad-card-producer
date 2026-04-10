@@ -349,10 +349,10 @@ function MainApp({ user, onLogout }) {
             </div>
           )}
 
-          {/* Titles — 공격형 */}
-          <div style={{ marginBottom:16 }}>
+          {/* Titles */}
+          <div style={{ marginBottom:24 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <span style={{ fontSize:10, fontWeight:700, color:"#4a4a44", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>공격형 — 3초 안에 클릭 ({(result.titles||[]).length})</span>
+              <span style={{ fontSize:10, fontWeight:700, color:"#4a4a44", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>썸네일 제목 제안 ({(result.titles||[]).length})</span>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
               {(result.titles || []).map((t, i) => (
@@ -372,32 +372,6 @@ function MainApp({ user, onLogout }) {
               ))}
             </div>
           </div>
-
-          {/* Titles — 여운형 (일본 카피) */}
-          {result.titles_jp && result.titles_jp.length > 0 && (
-            <div style={{ marginBottom:24 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-                <span style={{ fontSize:10, fontWeight:700, color:"#4a4a44", fontFamily:"'DM Mono',monospace", letterSpacing:"1px" }}>여운형 — 읽고 생각하게 ({result.titles_jp.length})</span>
-              </div>
-              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {result.titles_jp.map((t, i) => (
-                  <div
-                    key={i}
-                    onClick={() => copyText(t, "jp-" + i)}
-                    style={{
-                      background:"#0c0c0b", border:"1.5px solid #1e1e1c", borderRadius:10,
-                      padding:"10px 14px", cursor:"pointer", display:"flex", gap:10, alignItems:"center",
-                      transition:"all .2s",
-                    }}
-                  >
-                    <div style={{ minWidth:22, height:22, borderRadius:6, background:"#1a1a18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:700, color:"#6a6a64", fontFamily:"'DM Mono',monospace" }}>余{i+1}</div>
-                    <span style={{ fontSize:13, color:"#9a9a94", fontFamily:"'Pretendard',sans-serif", flex:1, fontStyle:"italic" }}>{t}</span>
-                    <span style={{ fontSize:10, color:"#3a3a36" }}>{copied===("jp-"+i) ? "✓" : "복사"}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
